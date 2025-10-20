@@ -17,7 +17,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             createOnLogin: "users-without-wallets",
           },
         },
-        appearance: { walletChainType: "ethereum-and-solana" },
+        appearance: { walletChainType: "solana-only" },
         externalWallets: { solana: { connectors: toSolanaWalletConnectors() } },
       }}
     >

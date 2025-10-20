@@ -6,7 +6,6 @@ import { useSolanaWallets } from "@privy-io/react-auth/solana";
 import { ArrowLeftIcon } from "@heroicons/react/16/solid";
 import { DocumentDuplicateIcon, ArrowPathIcon } from "@heroicons/react/16/solid";
 import { Header } from "@/components/ui/header";
-import { PositionsSection } from "@/components/dashboard/positions-section";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { showSuccessToast, showErrorToast } from "@/components/ui/custom-toast";
@@ -23,10 +22,7 @@ export default function DashboardPage() {
   const [balance, setBalance] = useState<string>("-");
   const [unit, setUnit] = useState<string>("");
   const [isFetching, setIsFetching] = useState<boolean>(false);
-  const [liquidityPositions, setLiquidityPositions] = useState<any[]>([]);
   const [regularTokens, setRegularTokens] = useState<any[]>([]);
-  const [isFetchingPositions, setIsFetchingPositions] = useState<boolean>(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
   const [solPrice, setSolPrice] = useState<number>(100);
   
   const primaryAddress = useMemo(() => {
@@ -114,45 +110,12 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const fetchPositions = useCallback(async () => {
-    if (!primaryAddress) return;
-    
-    let isCancelled = false;
-    setIsFetchingPositions(true);
-    try {
-      const res = await fetch(`/api/solana/positions?address=${encodeURIComponent(primaryAddress)}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`Positions API ${res.status}`);
-      const data = await res.json();
-      
-      if (!isCancelled) {
-        setLiquidityPositions(data.liquidityPositions || []);
-        setRegularTokens(data.regularTokens || []);
-        setDebugInfo(data.debug || null);
-      }
-    } catch (e) {
-      console.error("Positions fetch error", e);
-      if (!isCancelled) {
-        setLiquidityPositions([]);
-        setRegularTokens([]);
-        setDebugInfo(null);
-        showErrorToast("Failed to fetch positions");
-      }
-    } finally {
-      if (!isCancelled) setIsFetchingPositions(false);
-    }
-    return () => {
-      isCancelled = true;
-    };
-  }, [primaryAddress]);
 
   useEffect(() => {
     fetchBalance();
     fetchSolPrice();
   }, [fetchBalance, fetchSolPrice]);
 
-  useEffect(() => {
-    fetchPositions();
-  }, [fetchPositions]);
 
   async function handleCopy() {
     if (!primaryAddress) return;
@@ -192,21 +155,13 @@ export default function DashboardPage() {
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Summary Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow-sm border p-4">
               <div className="text-sm text-gray-500">Total Portfolio</div>
               <div className="text-2xl font-bold text-gray-900">
                 ${(() => {
                   // Collateral Value (placeholder)
                   const collateralValue = 0;
-                  
-                  // Calculate LP positions value
-                  const lpValue = liquidityPositions.reduce((total, position) => {
-                    if ((position as any).positionData?.totalValue) {
-                      return total + (position as any).positionData.totalValue;
-                    }
-                    return total;
-                  }, 0);
                   
                   // Calculate SOL value
                   const solValue = parseFloat(balance) * (solPrice || 0);
@@ -222,25 +177,14 @@ export default function DashboardPage() {
                   // Total Borrowed
                   const totalBorrowed = 100;
                   
-                  // Total Portfolio = (Collateral + LP + Wallet) - Borrowed
-                  return (collateralValue + lpValue + solValue + tokenValue - totalBorrowed).toFixed(2);
+                  // Total Portfolio = (Collateral + Wallet) - Borrowed
+                  return (collateralValue + solValue + tokenValue - totalBorrowed).toFixed(2);
                 })()}
               </div>
             </div>
             <div className="bg-white rounded-lg shadow-sm border p-4">
               <div className="text-sm text-gray-500">Collateral Value</div>
               <div className="text-2xl font-bold text-gray-900">$0.00</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm border p-4">
-              <div className="text-sm text-gray-500">LP Positions</div>
-              <div className="text-2xl font-bold text-gray-900">
-                ${liquidityPositions.reduce((total, position) => {
-                  if ((position as any).positionData?.totalValue) {
-                    return total + (position as any).positionData.totalValue;
-                  }
-                  return total;
-                }, 0).toFixed(2)}
-              </div>
             </div>
             <div className="bg-white rounded-lg shadow-sm border p-4">
               <div className="text-sm text-gray-500">Total Borrowed</div>
@@ -267,15 +211,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Positions Section */}
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <PositionsSection
-              liquidityPositions={liquidityPositions}
-              isFetchingPositions={isFetchingPositions}
-              debugInfo={debugInfo}
-              onRefresh={fetchPositions}
-            />
-          </div>
         </div>
       </div>
     </div>
