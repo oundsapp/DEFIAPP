@@ -24,6 +24,9 @@ export default function DashboardPage() {
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [regularTokens, setRegularTokens] = useState<any[]>([]);
   const [solPrice, setSolPrice] = useState<number>(100);
+  const [usdcTransactions, setUsdcTransactions] = useState<any[]>([]);
+  const [totalUsdcInVault, setTotalUsdcInVault] = useState<number>(0);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState<boolean>(false);
   
   const primaryAddress = useMemo(() => {
     const sol = walletsSolana[0]?.address;
@@ -104,10 +107,35 @@ export default function DashboardPage() {
   }, []);
 
 
+  const fetchUsdcTransactions = useCallback(async () => {
+    const solAddr = walletsSolana[0]?.address;
+    if (!solAddr) return;
+
+    const vaultAddress = "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
+    setIsLoadingTransactions(true);
+    try {
+      const res = await fetch(
+        `/api/solana/usdc-transactions?walletAddress=${encodeURIComponent(solAddr)}&vaultAddress=${encodeURIComponent(vaultAddress)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error(`USDC transactions API ${res.status}`);
+      const data = await res.json();
+      setUsdcTransactions(data.transactions || []);
+      setTotalUsdcInVault(data.totalSentToVault || 0);
+    } catch (e) {
+      console.error("USDC transactions fetch error", e);
+      setUsdcTransactions([]);
+      setTotalUsdcInVault(0);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  }, [walletsSolana]);
+
   useEffect(() => {
     fetchBalance();
     fetchSolPrice();
-  }, [fetchBalance, fetchSolPrice]);
+    fetchUsdcTransactions();
+  }, [fetchBalance, fetchSolPrice, fetchUsdcTransactions]);
 
 
   async function handleCopy() {
@@ -180,6 +208,80 @@ export default function DashboardPage() {
                   return (solValue + tokenValue).toFixed(2);
                 })()}
               </div>
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <div className="text-xs text-gray-500">USDC in Vault</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {isLoadingTransactions ? (
+                    <span className="text-gray-400">Loading...</span>
+                  ) : (
+                    `${totalUsdcInVault.toFixed(2)} USDC`
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* USDC Transactions */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">USDC Transactions</h3>
+              <p className="text-sm text-gray-500">Transactions between your wallet and vault</p>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {isLoadingTransactions ? (
+                <div className="p-8 text-center text-gray-500">
+                  Loading transactions...
+                </div>
+              ) : usdcTransactions.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <div className="text-sm">No USDC transactions found</div>
+                  <div className="text-xs mt-1">Transactions will appear here once you send USDC to or from the vault</div>
+                </div>
+              ) : (
+                usdcTransactions.map((tx, index) => (
+                  <a
+                    key={tx.signature || index}
+                    href={`https://solscan.io/tx/${tx.signature}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${
+                          tx.type === "sent" ? "bg-red-500" : "bg-green-500"
+                        }`} />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {tx.type === "sent" ? "Sent to Vault" : "Received from Vault"}
+                          </div>
+                          <div className="text-xs text-gray-500 font-mono">
+                            {tx.signature.slice(0, 8)}...{tx.signature.slice(-8)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-semibold ${
+                          tx.type === "sent" ? "text-red-600" : "text-green-600"
+                        }`}>
+                          {tx.type === "sent" ? "-" : "+"}{tx.amount.toFixed(2)} USDC
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {tx.blockTime 
+                            ? new Date(tx.blockTime * 1000).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Unknown date"}
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                ))
+              )}
             </div>
           </div>
 
