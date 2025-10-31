@@ -106,15 +106,37 @@ export default function DashboardPage() {
 
   const fetchUsdcTransactions = useCallback(async () => {
     const solAddr = walletsSolana[0]?.address;
-    if (!solAddr) return;
+    if (!solAddr) {
+      setUsdcTransactions([]);
+      setTotalUsdcInVault(0);
+      setIsLoadingTransactions(false);
+      return;
+    }
 
     const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE";
     setIsLoadingTransactions(true);
+    
+    // Add timeout
+    const timeoutId = setTimeout(() => {
+      console.warn("USDC transactions fetch timeout");
+      setIsLoadingTransactions(false);
+    }, 20000); // 20 second timeout
+
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 18000); // Abort after 18 seconds
+
       const res = await fetch(
         `/api/solana/usdc-transactions?walletAddress=${encodeURIComponent(solAddr)}&vaultAddress=${encodeURIComponent(vaultAddress)}`,
-        { cache: "no-store" }
+        { 
+          cache: "no-store",
+          signal: controller.signal,
+        }
       );
+      
+      clearTimeout(timeout);
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
         throw new Error(`USDC transactions API ${res.status}: ${errorData.error || "Unknown error"}`);
@@ -123,8 +145,14 @@ export default function DashboardPage() {
       console.log("USDC transactions data:", data);
       setUsdcTransactions(data.transactions || []);
       setTotalUsdcInVault(data.totalSentToVault || 0);
-    } catch (e) {
-      console.error("USDC transactions fetch error", e);
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        console.warn("USDC transactions fetch aborted due to timeout");
+        showErrorToast("Transaction fetch timed out. Please try again.");
+      } else {
+        console.error("USDC transactions fetch error", e);
+        showErrorToast("Failed to fetch USDC transactions");
+      }
       setUsdcTransactions([]);
       setTotalUsdcInVault(0);
     } finally {

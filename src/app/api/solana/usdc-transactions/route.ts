@@ -75,104 +75,137 @@ export async function GET(request: Request) {
 
     const allTransactions: USDCTransaction[] = [];
     const processedSignatures = new Set<string>();
+    
+    // We need both token accounts to detect transfers
+    if (!walletUSDCAddress || !vaultUSDCAddress) {
+      return NextResponse.json({
+        transactions: [],
+        totalSentToVault: 0,
+        count: 0,
+        message: "Both wallet and vault need USDC token accounts to detect transfers",
+      });
+    }
 
-    // Helper function to process signatures
-    const processSignatures = async (tokenAccountAddress: string) => {
+    // Helper function to process signatures with timeout
+    const processSignatures = async (tokenAccountAddress: string, timeoutMs: number = 15000) => {
       if (!tokenAccountAddress) return;
 
+      const startTime = Date.now();
+      
       try {
+        // Fetch fewer signatures initially for faster response
         const signatures = await connection.getSignaturesForAddress(
           new PublicKey(tokenAccountAddress),
-          { limit: 100 }
+          { limit: 30 }
         );
 
-        for (const sigInfo of signatures) {
-          if (processedSignatures.has(sigInfo.signature)) continue;
-          processedSignatures.add(sigInfo.signature);
+        // Batch fetch transactions for better performance
+        const signatureStrings = signatures
+          .filter(sig => !processedSignatures.has(sig.signature))
+          .map(sig => sig.signature)
+          .slice(0, 20); // Process max 20 at a time
 
-          try {
-            const tx = await connection.getParsedTransaction(sigInfo.signature, {
+        if (signatureStrings.length === 0) return;
+
+        // Mark as processed
+        signatureStrings.forEach(sig => processedSignatures.add(sig));
+
+        // Batch fetch transactions
+        const transactions = await Promise.allSettled(
+          signatureStrings.map(sig => 
+            connection.getParsedTransaction(sig, {
               maxSupportedTransactionVersion: 0,
+            })
+          )
+        );
+
+        for (let i = 0; i < transactions.length; i++) {
+          // Check timeout
+          if (Date.now() - startTime > timeoutMs) {
+            console.warn(`Timeout processing transactions for ${tokenAccountAddress}`);
+            break;
+          }
+
+          const result = transactions[i];
+          if (result.status !== 'fulfilled') continue;
+
+          const tx = result.value;
+          if (!tx || !tx.meta) continue;
+
+          const preBalances = tx.meta.preTokenBalances || [];
+          const postBalances = tx.meta.postTokenBalances || [];
+
+          // Get account keys to identify token accounts (faster check)
+          const accountKeys = tx.transaction.message.accountKeys.map(key => 
+            typeof key === 'string' ? key : key.pubkey.toString()
+          );
+
+          // Quick check: skip if both accounts aren't in transaction
+          const hasWalletAccount = accountKeys.includes(walletUSDCAddress);
+          const hasVaultAccount = accountKeys.includes(vaultUSDCAddress);
+          
+          if (!hasWalletAccount || !hasVaultAccount) continue;
+
+          // Find wallet and vault USDC token account indices
+          const walletTokenAccountIndex = accountKeys.indexOf(walletUSDCAddress);
+          const vaultTokenAccountIndex = accountKeys.indexOf(vaultUSDCAddress);
+
+          // Find USDC balance changes for both accounts
+          const walletPreBalance = preBalances.find(
+            pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
+          );
+          const walletPostBalance = postBalances.find(
+            pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
+          );
+          const vaultPreBalance = preBalances.find(
+            pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
+          );
+          const vaultPostBalance = postBalances.find(
+            pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
+          );
+
+          // Calculate changes
+          const walletPreAmount = walletPreBalance 
+            ? parseFloat(walletPreBalance.uiTokenAmount.uiAmountString || "0") 
+            : 0;
+          const walletPostAmount = walletPostBalance 
+            ? parseFloat(walletPostBalance.uiTokenAmount.uiAmountString || "0") 
+            : 0;
+          const vaultPreAmount = vaultPreBalance 
+            ? parseFloat(vaultPreBalance.uiTokenAmount.uiAmountString || "0") 
+            : 0;
+          const vaultPostAmount = vaultPostBalance 
+            ? parseFloat(vaultPostBalance.uiTokenAmount.uiAmountString || "0") 
+            : 0;
+
+          const walletChange = walletPostAmount - walletPreAmount;
+          const vaultChange = vaultPostAmount - vaultPreAmount;
+
+          // Check if this is a transfer between wallet and vault
+          // Transfer from wallet to vault: wallet decreases, vault increases
+          const sigInfo = signatures.find(s => s.signature === signatureStrings[i]);
+          if (sigInfo && walletChange < -0.000001 && vaultChange > 0.000001 && Math.abs(walletChange + vaultChange) < 0.01) {
+            allTransactions.push({
+              signature: signatureStrings[i],
+              timestamp: sigInfo.blockTime || Date.now() / 1000,
+              type: "sent",
+              amount: Math.abs(walletChange),
+              from: walletAddress,
+              to: vaultAddress,
+              blockTime: sigInfo.blockTime ?? null,
             });
-
-            if (!tx || !tx.meta) continue;
-
-            const preBalances = tx.meta.preTokenBalances || [];
-            const postBalances = tx.meta.postTokenBalances || [];
-
-            // Get account keys to identify token accounts
-            const accountKeys = tx.transaction.message.accountKeys.map(key => 
-              typeof key === 'string' ? key : key.pubkey.toString()
-            );
-
-            // We need both token accounts to be in the transaction to detect a transfer
-            if (!walletUSDCAddress || !vaultUSDCAddress) continue;
-
-            // Find wallet and vault USDC token account indices
-            const walletTokenAccountIndex = accountKeys.findIndex(addr => addr === walletUSDCAddress);
-            const vaultTokenAccountIndex = accountKeys.findIndex(addr => addr === vaultUSDCAddress);
-
-            // Skip if both accounts are not in this transaction (not a transfer between them)
-            if (walletTokenAccountIndex === -1 || vaultTokenAccountIndex === -1) continue;
-
-            // Find USDC balance changes for both accounts
-            const walletPreBalance = preBalances.find(
-              pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
-            );
-            const walletPostBalance = postBalances.find(
-              pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
-            );
-            const vaultPreBalance = preBalances.find(
-              pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
-            );
-            const vaultPostBalance = postBalances.find(
-              pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
-            );
-
-            // Calculate changes
-            const walletPreAmount = walletPreBalance 
-              ? parseFloat(walletPreBalance.uiTokenAmount.uiAmountString || "0") 
-              : 0;
-            const walletPostAmount = walletPostBalance 
-              ? parseFloat(walletPostBalance.uiTokenAmount.uiAmountString || "0") 
-              : 0;
-            const vaultPreAmount = vaultPreBalance 
-              ? parseFloat(vaultPreBalance.uiTokenAmount.uiAmountString || "0") 
-              : 0;
-            const vaultPostAmount = vaultPostBalance 
-              ? parseFloat(vaultPostBalance.uiTokenAmount.uiAmountString || "0") 
-              : 0;
-
-            const walletChange = walletPostAmount - walletPreAmount;
-            const vaultChange = vaultPostAmount - vaultPreAmount;
-
-            // Check if this is a transfer between wallet and vault
-            // Transfer from wallet to vault: wallet decreases, vault increases
-            if (walletChange < -0.000001 && vaultChange > 0.000001 && Math.abs(walletChange + vaultChange) < 0.01) {
-              allTransactions.push({
-                signature: sigInfo.signature,
-                timestamp: sigInfo.blockTime || Date.now() / 1000,
-                type: "sent",
-                amount: Math.abs(walletChange),
-                from: walletAddress,
-                to: vaultAddress,
-                blockTime: sigInfo.blockTime ?? null,
-              });
-            }
-            // Transfer from vault to wallet: vault decreases, wallet increases
-            else if (vaultChange < -0.000001 && walletChange > 0.000001 && Math.abs(vaultChange + walletChange) < 0.01) {
-              allTransactions.push({
-                signature: sigInfo.signature,
-                timestamp: sigInfo.blockTime || Date.now() / 1000,
-                type: "received",
-                amount: Math.abs(vaultChange),
-                from: vaultAddress,
-                to: walletAddress,
-                blockTime: sigInfo.blockTime ?? null,
-              });
-            }
-          } catch (error) {
-            console.warn(`Failed to parse transaction ${sigInfo.signature}:`, error);
+          }
+          // Transfer from vault to wallet: vault decreases, wallet increases
+          else if (sigInfo && vaultChange < -0.000001 && walletChange > 0.000001 && Math.abs(vaultChange + walletChange) < 0.01) {
+            allTransactions.push({
+              signature: signatureStrings[i],
+              timestamp: sigInfo.blockTime || Date.now() / 1000,
+              type: "received",
+              amount: Math.abs(vaultChange),
+              from: vaultAddress,
+              to: walletAddress,
+              blockTime: sigInfo.blockTime ?? null,
+            });
           }
         }
       } catch (error) {
