@@ -4,25 +4,22 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth";
 import { useSolanaWallets } from "@privy-io/react-auth/solana";
 import { ArrowLeftIcon } from "@heroicons/react/16/solid";
-import { DocumentDuplicateIcon, ArrowPathIcon } from "@heroicons/react/16/solid";
 import { Header } from "@/components/ui/header";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { showSuccessToast, showErrorToast } from "@/components/ui/custom-toast";
 import { createPublicClient, formatEther, http } from "viem";
 import { mainnet } from "viem/chains";
-import { Connection, PublicKey } from "@solana/web3.js";
 
 export default function DashboardPage() {
   const { logout } = usePrivy();
   const router = useRouter();
   const { wallets } = useWallets();
   const { wallets: walletsSolana } = useSolanaWallets();
-  const [copied, setCopied] = useState(false);
   const [balance, setBalance] = useState<string>("-");
   const [unit, setUnit] = useState<string>("");
   const [isFetching, setIsFetching] = useState<boolean>(false);
-  const [regularTokens, setRegularTokens] = useState<any[]>([]);
+  const [regularTokens] = useState<any[]>([]);
   const [solPrice, setSolPrice] = useState<number>(100);
   const [usdcTransactions, setUsdcTransactions] = useState<any[]>([]);
   const [totalUsdcInVault, setTotalUsdcInVault] = useState<number>(0);
@@ -142,8 +139,6 @@ export default function DashboardPage() {
     if (!primaryAddress) return;
     try {
       await navigator.clipboard.writeText(primaryAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
       showSuccessToast("Address copied to clipboard");
     } catch {
       // no-op

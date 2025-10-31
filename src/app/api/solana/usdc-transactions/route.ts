@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     try {
       new PublicKey(walletAddress);
       new PublicKey(vaultAddress);
-    } catch (error) {
+    } catch {
       return NextResponse.json({ error: "Invalid Solana address" }, { status: 400 });
     }
 
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     const processedSignatures = new Set<string>();
 
     // Helper function to process signatures
-    const processSignatures = async (tokenAccountAddress: string, addressType: "wallet" | "vault") => {
+    const processSignatures = async (tokenAccountAddress: string) => {
       if (!tokenAccountAddress) return;
 
       try {
@@ -144,7 +144,7 @@ export async function GET(request: Request) {
                 amount: Math.abs(change),
                 from: fromAddr,
                 to: toAddr,
-                blockTime: sigInfo.blockTime,
+                blockTime: sigInfo.blockTime ?? null,
               });
 
               break; // Only process one transfer per transaction to avoid duplicates
@@ -160,8 +160,8 @@ export async function GET(request: Request) {
 
     // Process both accounts
     await Promise.all([
-      processSignatures(walletUSDCAddress || "", "wallet"),
-      processSignatures(vaultUSDCAddress || "", "vault"),
+      processSignatures(walletUSDCAddress || ""),
+      processSignatures(vaultUSDCAddress || ""),
     ]);
 
     // Remove duplicates and sort by timestamp (newest first)
