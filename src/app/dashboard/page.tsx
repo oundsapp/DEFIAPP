@@ -113,7 +113,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE";
+    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
     setIsLoadingTransactions(true);
     
     // Add timeout
@@ -179,7 +179,7 @@ export default function DashboardPage() {
   }
 
   async function handleCopyVaultAddress() {
-    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE";
+    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
     try {
       await navigator.clipboard.writeText(vaultAddress);
       showSuccessToast("Vault address copied to clipboard");
@@ -204,7 +204,7 @@ export default function DashboardPage() {
         solPrice={solPrice}
         address={primaryAddress}
         onCopyAddress={handleCopy}
-        vaultAddress={process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE"}
+        vaultAddress={process.env.NEXT_PUBLIC_VAULT_ADDRESS || "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap"}
         onCopyVaultAddress={handleCopyVaultAddress}
         rightContent={
           <button className="button" onClick={handleLogout}>
