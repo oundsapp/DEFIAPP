@@ -115,8 +115,12 @@ export default function DashboardPage() {
         `/api/solana/usdc-transactions?walletAddress=${encodeURIComponent(solAddr)}&vaultAddress=${encodeURIComponent(vaultAddress)}`,
         { cache: "no-store" }
       );
-      if (!res.ok) throw new Error(`USDC transactions API ${res.status}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(`USDC transactions API ${res.status}: ${errorData.error || "Unknown error"}`);
+      }
       const data = await res.json();
+      console.log("USDC transactions data:", data);
       setUsdcTransactions(data.transactions || []);
       setTotalUsdcInVault(data.totalSentToVault || 0);
     } catch (e) {

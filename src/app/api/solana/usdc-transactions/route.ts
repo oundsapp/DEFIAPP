@@ -63,6 +63,16 @@ export async function GET(request: Request) {
     const walletUSDCAddress = walletUSDCAccount?.pubkey.toString();
     const vaultUSDCAddress = vaultUSDCAccount?.pubkey.toString();
 
+    // If no USDC accounts found, return empty
+    if (!walletUSDCAddress && !vaultUSDCAddress) {
+      return NextResponse.json({
+        transactions: [],
+        totalSentToVault: 0,
+        count: 0,
+        message: "No USDC token accounts found for wallet or vault",
+      });
+    }
+
     const allTransactions: USDCTransaction[] = [];
     const processedSignatures = new Set<string>();
 
@@ -90,64 +100,76 @@ export async function GET(request: Request) {
             const preBalances = tx.meta.preTokenBalances || [];
             const postBalances = tx.meta.postTokenBalances || [];
 
-            // Find USDC balance changes
-            for (const postBalance of postBalances) {
-              if (postBalance.mint !== USDC_MINT) continue;
+            // Get account keys to identify token accounts
+            const accountKeys = tx.transaction.message.accountKeys.map(key => 
+              typeof key === 'string' ? key : key.pubkey.toString()
+            );
 
-              const preBalance = preBalances.find(
-                (pb) => pb.accountIndex === postBalance.accountIndex
-              );
+            // We need both token accounts to be in the transaction to detect a transfer
+            if (!walletUSDCAddress || !vaultUSDCAddress) continue;
 
-              const preAmount = preBalance ? parseFloat(preBalance.uiTokenAmount.uiAmountString || "0") : 0;
-              const postAmount = parseFloat(postBalance.uiTokenAmount.uiAmountString || "0");
-              const change = postAmount - preAmount;
+            // Find wallet and vault USDC token account indices
+            const walletTokenAccountIndex = accountKeys.findIndex(addr => addr === walletUSDCAddress);
+            const vaultTokenAccountIndex = accountKeys.findIndex(addr => addr === vaultUSDCAddress);
 
-              if (Math.abs(change) < 0.000001) continue;
+            // Skip if both accounts are not in this transaction (not a transfer between them)
+            if (walletTokenAccountIndex === -1 || vaultTokenAccountIndex === -1) continue;
 
-              const accountOwner = postBalance.owner || "";
-              
-              // Determine if this transaction involves both wallet and vault
-              const involvesWallet = accountOwner === walletAddress || 
-                preBalances.some(pb => pb.owner === walletAddress) ||
-                postBalances.some(pb => pb.owner === walletAddress);
-              
-              const involvesVault = accountOwner === vaultAddress ||
-                preBalances.some(pb => pb.owner === vaultAddress) ||
-                postBalances.some(pb => pb.owner === vaultAddress);
+            // Find USDC balance changes for both accounts
+            const walletPreBalance = preBalances.find(
+              pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
+            );
+            const walletPostBalance = postBalances.find(
+              pb => pb.accountIndex === walletTokenAccountIndex && pb.mint === USDC_MINT
+            );
+            const vaultPreBalance = preBalances.find(
+              pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
+            );
+            const vaultPostBalance = postBalances.find(
+              pb => pb.accountIndex === vaultTokenAccountIndex && pb.mint === USDC_MINT
+            );
 
-              if (!involvesWallet || !involvesVault) continue;
+            // Calculate changes
+            const walletPreAmount = walletPreBalance 
+              ? parseFloat(walletPreBalance.uiTokenAmount.uiAmountString || "0") 
+              : 0;
+            const walletPostAmount = walletPostBalance 
+              ? parseFloat(walletPostBalance.uiTokenAmount.uiAmountString || "0") 
+              : 0;
+            const vaultPreAmount = vaultPreBalance 
+              ? parseFloat(vaultPreBalance.uiTokenAmount.uiAmountString || "0") 
+              : 0;
+            const vaultPostAmount = vaultPostBalance 
+              ? parseFloat(vaultPostBalance.uiTokenAmount.uiAmountString || "0") 
+              : 0;
 
-              // Determine transaction direction
-              let type: "sent" | "received" = "sent";
-              let fromAddr = walletAddress;
-              let toAddr = vaultAddress;
+            const walletChange = walletPostAmount - walletPreAmount;
+            const vaultChange = vaultPostAmount - vaultPreAmount;
 
-              if (accountOwner === vaultAddress && change > 0) {
-                // USDC increased in vault - sent from wallet
-                type = "sent";
-                fromAddr = walletAddress;
-                toAddr = vaultAddress;
-              } else if (accountOwner === walletAddress && change > 0) {
-                // USDC increased in wallet - received from vault
-                type = "received";
-                fromAddr = vaultAddress;
-                toAddr = walletAddress;
-              } else {
-                // Skip if we can't determine direction clearly
-                continue;
-              }
-
+            // Check if this is a transfer between wallet and vault
+            // Transfer from wallet to vault: wallet decreases, vault increases
+            if (walletChange < -0.000001 && vaultChange > 0.000001 && Math.abs(walletChange + vaultChange) < 0.01) {
               allTransactions.push({
                 signature: sigInfo.signature,
                 timestamp: sigInfo.blockTime || Date.now() / 1000,
-                type,
-                amount: Math.abs(change),
-                from: fromAddr,
-                to: toAddr,
+                type: "sent",
+                amount: Math.abs(walletChange),
+                from: walletAddress,
+                to: vaultAddress,
                 blockTime: sigInfo.blockTime ?? null,
               });
-
-              break; // Only process one transfer per transaction to avoid duplicates
+            }
+            // Transfer from vault to wallet: vault decreases, wallet increases
+            else if (vaultChange < -0.000001 && walletChange > 0.000001 && Math.abs(vaultChange + walletChange) < 0.01) {
+              allTransactions.push({
+                signature: sigInfo.signature,
+                timestamp: sigInfo.blockTime || Date.now() / 1000,
+                type: "received",
+                amount: Math.abs(vaultChange),
+                from: vaultAddress,
+                to: walletAddress,
+                blockTime: sigInfo.blockTime ?? null,
+              });
             }
           } catch (error) {
             console.warn(`Failed to parse transaction ${sigInfo.signature}:`, error);
@@ -158,11 +180,16 @@ export async function GET(request: Request) {
       }
     };
 
-    // Process both accounts
-    await Promise.all([
-      processSignatures(walletUSDCAddress || ""),
-      processSignatures(vaultUSDCAddress || ""),
-    ]);
+    // Process both accounts if they exist
+    const promises = [];
+    if (walletUSDCAddress) {
+      promises.push(processSignatures(walletUSDCAddress));
+    }
+    if (vaultUSDCAddress) {
+      promises.push(processSignatures(vaultUSDCAddress));
+    }
+    
+    await Promise.all(promises);
 
     // Remove duplicates and sort by timestamp (newest first)
     const uniqueTransactions = Array.from(
@@ -178,6 +205,12 @@ export async function GET(request: Request) {
       transactions: uniqueTransactions,
       totalSentToVault,
       count: uniqueTransactions.length,
+      debug: {
+        walletUSDCAddress,
+        vaultUSDCAddress,
+        hasWalletAccount: !!walletUSDCAddress,
+        hasVaultAccount: !!vaultUSDCAddress,
+      },
     });
   } catch (error: any) {
     console.error("Error fetching USDC transactions:", error);
