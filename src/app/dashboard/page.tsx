@@ -32,13 +32,6 @@ export default function DashboardPage() {
     return evm || "";
   }, [wallets, walletsSolana]);
 
-  const displayAddress = useMemo(() => {
-    if (!primaryAddress) return "";
-    // Truncate: 0x1234...abcd or base58 style
-    const start = primaryAddress.slice(0, 6);
-    const end = primaryAddress.slice(-4);
-    return `${start}...${end}`;
-  }, [primaryAddress]);
 
   const fetchBalance = useCallback(async () => {
     let isCancelled = false;
@@ -129,6 +122,16 @@ export default function DashboardPage() {
       showErrorToast("Failed to copy address");
     }
   }
+
+  async function handleCopyVaultAddress() {
+    const vaultAddress = "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
+    try {
+      await navigator.clipboard.writeText(vaultAddress);
+      showSuccessToast("Vault address copied to clipboard");
+    } catch {
+      showErrorToast("Failed to copy vault address");
+    }
+  }
   
   async function handleLogout() {
     await logout();
@@ -146,6 +149,8 @@ export default function DashboardPage() {
         solPrice={solPrice}
         address={primaryAddress}
         onCopyAddress={handleCopy}
+        vaultAddress="DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap"
+        onCopyVaultAddress={handleCopyVaultAddress}
         rightContent={
           <button className="button" onClick={handleLogout}>
             <ArrowLeftIcon className="h-4 w-4" strokeWidth={2} /> Logout

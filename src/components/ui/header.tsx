@@ -1,7 +1,9 @@
 import { ArrowRightIcon, ArrowUpRightIcon } from "@heroicons/react/16/solid";
+import { DocumentDuplicateIcon } from "@heroicons/react/16/solid";
 import { PrivyLogo } from "./privy-logo";
 import { BalanceDropdown } from "./balance-dropdown";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 interface HeaderProps {
   rightContent?: ReactNode;
@@ -13,6 +15,8 @@ interface HeaderProps {
   solPrice?: number;
   address?: string;
   onCopyAddress?: () => void;
+  vaultAddress?: string;
+  onCopyVaultAddress?: () => void;
 }
 
 export function Header({ 
@@ -24,8 +28,25 @@ export function Header({
   onRefreshBalance,
   solPrice,
   address,
-  onCopyAddress
+  onCopyAddress,
+  vaultAddress,
+  onCopyVaultAddress
 }: HeaderProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyVault = () => {
+    if (onCopyVaultAddress) {
+      onCopyVaultAddress();
+    } else if (vaultAddress) {
+      navigator.clipboard.writeText(vaultAddress).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }).catch(() => {
+        // Handle error silently
+      });
+    }
+  };
+
   return (
     <header className="h-[60px] flex flex-row justify-between items-center px-6 border-b bg-white border-[#E2E3F0]">
       <div className="flex flex-row items-center gap-2 h-[26px]">
@@ -40,6 +61,21 @@ export function Header({
       <div className="flex flex-row justify-end items-center gap-4 h-9">
         {balance && unit && tokens && onRefreshBalance ? (
           <>
+            {vaultAddress && (
+              <div className="flex flex-row items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-md border border-gray-200">
+                <span className="text-sm font-mono text-gray-700">
+                  {vaultAddress.slice(0, 6)}...{vaultAddress.slice(-4)}
+                </span>
+                <button
+                  onClick={handleCopyVault}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                  title="Copy vault address"
+                  aria-label="Copy vault address"
+                >
+                  <DocumentDuplicateIcon className={`h-4 w-4 ${copied ? 'text-green-600' : ''}`} />
+                </button>
+              </div>
+            )}
             <BalanceDropdown
               balance={balance}
               unit={unit}
