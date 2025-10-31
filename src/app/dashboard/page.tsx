@@ -108,7 +108,7 @@ export default function DashboardPage() {
     const solAddr = walletsSolana[0]?.address;
     if (!solAddr) return;
 
-    const vaultAddress = "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE"//"DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
+    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE";
     setIsLoadingTransactions(true);
     try {
       const res = await fetch(
@@ -151,7 +151,7 @@ export default function DashboardPage() {
   }
 
   async function handleCopyVaultAddress() {
-    const vaultAddress = "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
+    const vaultAddress = process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE";
     try {
       await navigator.clipboard.writeText(vaultAddress);
       showSuccessToast("Vault address copied to clipboard");
@@ -176,7 +176,7 @@ export default function DashboardPage() {
         solPrice={solPrice}
         address={primaryAddress}
         onCopyAddress={handleCopy}
-        vaultAddress="DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap"
+        vaultAddress={process.env.NEXT_PUBLIC_VAULT_ADDRESS || "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE"}
         onCopyVaultAddress={handleCopyVaultAddress}
         rightContent={
           <button className="button" onClick={handleLogout}>
