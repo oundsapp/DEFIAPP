@@ -156,40 +156,7 @@ export default function DashboardPage() {
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Summary Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg shadow-sm border p-4">
-              <div className="text-sm text-gray-500">Total Portfolio</div>
-              <div className="text-2xl font-bold text-gray-900">
-                ${(() => {
-                  // Collateral Value (placeholder)
-                  const collateralValue = 0;
-                  
-                  // Calculate SOL value
-                  const solValue = parseFloat(balance) * (solPrice || 0);
-                  
-                  // Calculate token values
-                  const tokenValue = regularTokens.reduce((sum, token) => {
-                    if (token.tokenInfo?.price) {
-                      return sum + (token.uiAmount * token.tokenInfo.price);
-                    }
-                    return sum;
-                  }, 0);
-                  
-                  // Total Borrowed
-                  const totalBorrowed = 100;
-                  
-                  // Total Portfolio = (Collateral + Wallet) - Borrowed
-                  return (collateralValue + solValue + tokenValue - totalBorrowed).toFixed(2);
-                })()}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm border p-4">
-              <div className="text-sm text-gray-500">Collateral Value</div>
-              <div className="text-2xl font-bold text-gray-900">$0.00</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm border p-4">
-              <div className="text-sm text-gray-500">Total Borrowed</div>
-              <div className="text-2xl font-semibold text-gray-900">$100.00</div>
-            </div>
+
             <div className="bg-white rounded-lg shadow-sm border p-4">
               <div className="text-sm text-gray-500">Wallet Balance</div>
               <div className="text-2xl font-semibold text-gray-900">
