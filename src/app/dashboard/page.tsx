@@ -108,7 +108,7 @@ export default function DashboardPage() {
     const solAddr = walletsSolana[0]?.address;
     if (!solAddr) return;
 
-    const vaultAddress = "DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
+    const vaultAddress = "7wUdSwCTdNJ47Xdii9nBHcxrpZnRCBDpjZm2YWJ6NJAE"//"DfsFSi8tDjaHXaR5HDmF9gHt2KtsmfvUtyYNZmftqTap";
     setIsLoadingTransactions(true);
     try {
       const res = await fetch(
